@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phonics Drag & Drop</title>
+    <link href="https://fonts.googleapis.com/css2?family=Balsamiq+Sans:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4a90e2;
+            --success: #48bb78;
+            --error: #f56565;
+            --warning: #f6ad55;
+            --container-bg: #fff;
+        }
+
+        body {
+            font-family: 'Balsamiq Sans', cursive, sans-serif;
+            background-image: url('gamebackground.jpg');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        /* --- Top Center Name Display --- */
+        #selected-name-display {
+            font-size: 3.5rem;
+            color: #fff;
+            text-shadow: 3px 3px 0px #000, -1px -1px 0px #000, 1px -1px 0px #000, -1px 1px 0px #000;
+            font-weight: bold;
+            margin-top: 20px;
+            height: 4rem;
+            z-index: 10;
+        }
+
+        #game-container {
+            background: var(--container-bg);
+            padding: 2.6rem;
+            border-radius: 26px;
+            box-shadow: 0 13px 32px rgba(0,0,0,0.2);
+            text-align: center;
+            width: 90%;
+            max-width: 700px;
+            margin-top: 20px;
+        }
+
+        /* --- Game UI Elements --- */
+        .word-display {
+            font-size: 6.5rem;
+            font-weight: bold;
+            letter-spacing: 0.65rem;
+            margin: 1.5rem 0;
+            color: #2d3748;
+        }
+
+        .drop-zone {
+            display: inline-block;
+            width: 104px;
+            height: 130px;
+            border-bottom: 7px solid var(--primary);
+            vertical-align: bottom;
+            transition: all 0.3s;
+        }
+
+        .options-container {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 1.5rem;
+            min-height: 104px;
+        }
+
+        .letter {
+            width: 78px;
+            height: 78px;
+            background: var(--primary);
+            color: white;
+            font-size: 2.6rem;
+            font-weight: bold;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 15px;
+            cursor: grab;
+            box-shadow: 0 5px 8px rgba(0,0,0,0.1);
+        }
+
+        .controls {
+            margin-top: 2rem;
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 13px;
+        }
+
+        button {
+            padding: 13px 26px;
+            font-size: 1.3rem;
+            font-family: 'Balsamiq Sans', cursive, sans-serif;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 700;
+            transition: transform 0.1s;
+        }
+
+        button:active { transform: scale(0.95); }
+
+        #pick-btn { background: var(--warning); color: white; }
+        #edit-names-btn { background: #4a5568; color: white; }
+        #listen-btn { background: #ed8936; color: white; }
+        #next-btn { background: var(--success); color: white; display: none; }
+        #quit-btn { background: #a0aec0; color: white; }
+
+        #feedback { height: 40px; font-weight: bold; font-size: 1.56rem; }
+        .correct-text { color: var(--success); }
+        .incorrect-text { color: var(--error); }
+
+        /* --- Hidden Modal for Name Input --- */
+        #name-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7);
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 20px;
+            width: 300px;
+            text-align: center;
+        }
+
+        #name-input-area {
+            width: 90%;
+            height: 150px;
+            font-family: 'Balsamiq Sans', sans-serif;
+            margin-bottom: 15px;
+            padding: 10px;
+            font-size: 1rem;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Top Display -->
+    <div id="selected-name-display"></div>
+
+    <div id="game-container">
+        <div id="feedback"></div>
+        
+        <div class="word-display">
+            <span id="drop-zone" class="drop-zone"></span><span id="word-pattern">et</span>
+        </div>
+
+        <div class="options-container" id="options"></div>
+
+        <div class="controls">
+            <button id="pick-btn" onclick="pickRandomName()">Pick Student</button>
+            <button id="edit-names-btn" onclick="toggleModal()">Edit Names</button>
+            <button id="listen-btn" onclick="speakWord()">Listen</button>
+            <button id="next-btn" onclick="nextQuestion()">Next Word</button>
+            <button id="quit-btn" onclick="quitGame()">Quit</button>
+        </div>
+    </div>
+
+    <!-- Hidden Name Input Modal -->
+    <div id="name-modal">
+        <div class="modal-content">
+            <h3>Enter Class List</h3>
+            <textarea id="name-input-area" placeholder="Enter names..."></textarea>
+            <br>
+            <button onclick="toggleModal()" style="background: var(--success); color: white;">Save & Close</button>
+        </div>
+    </div>
+
+<script>
+    // --- Name Picker Logic ---
+    function toggleModal() {
+        const modal = document.getElementById('name-modal');
+        modal.style.display = (modal.style.display === 'flex') ? 'none' : 'flex';
+    }
+
+    function pickRandomName() {
+        const input = document.getElementById('name-input-area').value;
+        const display = document.getElementById('selected-name-display');
+        const names = input.split(/[,\n]/).map(n => n.trim()).filter(n => n !== "");
+
+        if (names.length === 0) {
+            display.textContent = "Click 'Edit Names' first!";
+            return;
+        }
+
+        let counter = 0;
+        const interval = setInterval(() => {
+            display.textContent = names[Math.floor(Math.random() * names.length)];
+            counter++;
+            if (counter > 12) {
+                clearInterval(interval);
+                display.textContent = "⭐ " + names[Math.floor(Math.random() * names.length)] + " ⭐";
+            }
+        }, 60);
+    }
+
+    // --- Game Logic ---
+    const vocabulary = [
+        { word: 'pet', start: 'p', rest: 'et' },
+        { word: 'wet', start: 'w', rest: 'et' },
+        { word: 'net', start: 'n', rest: 'et' },
+        { word: 'bell', start: 'b', rest: 'ell' },
+        { word: 'well', start: 'w', rest: 'ell' },
+        { word: 'fell', start: 'f', rest: 'ell' }
+    ];
+
+    let currentItem = null;
+    let pool = [...vocabulary];
+
+    const dropZone = document.getElementById('drop-zone');
+    const patternDisplay = document.getElementById('word-pattern');
+    const optionsContainer = document.getElementById('options');
+    const feedback = document.getElementById('feedback');
+    const nextBtn = document.getElementById('next-btn');
+
+    function initGame() {
+        if (pool.length === 0) {
+            document.getElementById('game-container').innerHTML = `<h1>🎉 All Done!</h1><button onclick="location.reload()" style="background: #ed8936; color: white;">Restart</button>`;
+            return;
+        }
+        currentItem = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+        patternDisplay.textContent = currentItem.rest;
+        dropZone.textContent = "";
+        dropZone.style.borderBottom = "7px solid var(--primary)";
+        feedback.textContent = "";
+        nextBtn.style.display = "none";
+        setupOptions();
+        setTimeout(speakWord, 500);
+    }
+
+    function setupOptions() {
+        optionsContainer.innerHTML = '';
+        const letters = ['p', 'w', 'n', 'b', 'f'];
+        letters.sort(() => Math.random() - 0.5);
+        letters.forEach(l => {
+            const el = document.createElement('div');
+            el.className = 'letter'; el.textContent = l; el.draggable = true;
+            el.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', l));
+            optionsContainer.appendChild(el);
+        });
+    }
+
+    function speakWord() {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(currentItem.word);
+        utterance.rate = 0.7;
+        window.speechSynthesis.speak(utterance);
+    }
+
+    dropZone.addEventListener('dragover', (e) => e.preventDefault());
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const draggedLetter = e.dataTransfer.getData('text/plain');
+        dropZone.textContent = draggedLetter;
+        if (draggedLetter === currentItem.start) {
+            feedback.textContent = "Correct!";
+            feedback.className = "correct-text";
+            dropZone.style.borderBottom = "7px solid var(--success)";
+            nextBtn.style.display = "inline-block";
+        } else {
+            feedback.textContent = "Try again!";
+            feedback.className = "incorrect-text";
+            dropZone.style.borderBottom = "7px solid var(--error)";
+            setTimeout(() => { 
+                if (feedback.className === "incorrect-text") {
+                    dropZone.textContent = ""; 
+                    dropZone.style.borderBottom = "7px solid var(--primary)";
+                }
+            }, 1000);
+        }
+    });
+
+    function nextQuestion() { initGame(); }
+    function quitGame() { if(confirm("Restart game?")) location.reload(); }
+
+    initGame();
+</script>
+</body>
+</html>
