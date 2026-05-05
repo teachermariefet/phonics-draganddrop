@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Phonics Drag & Drop</title>
     <link href="https://fonts.googleapis.com/css2?family=Balsamiq+Sans:wght@400;700&display=swap" rel="stylesheet">
     <style>
@@ -26,9 +26,9 @@
             height: 100vh;
             margin: 0;
             overflow: hidden;
+            touch-action: none; /* Prevents screen scrolling/zooming during play */
         }
 
-        /* --- Top Center Name Display --- */
         #selected-name-display {
             font-size: 3.5rem;
             color: #fff;
@@ -48,9 +48,9 @@
             width: 90%;
             max-width: 700px;
             margin-top: 20px;
+            position: relative;
         }
 
-        /* --- Game UI Elements --- */
         .word-display {
             font-size: 6.5rem;
             font-weight: bold;
@@ -65,7 +65,7 @@
             height: 130px;
             border-bottom: 7px solid var(--primary);
             vertical-align: bottom;
-            transition: all 0.3s;
+            transition: background 0.3s;
         }
 
         .options-container {
@@ -87,8 +87,19 @@
             justify-content: center;
             align-items: center;
             border-radius: 15px;
-            cursor: grab;
+            cursor: pointer;
             box-shadow: 0 5px 8px rgba(0,0,0,0.1);
+            touch-action: none;
+            position: relative;
+            z-index: 5;
+            user-select: none;
+        }
+
+        .letter.dragging {
+            opacity: 0.8;
+            z-index: 1000;
+            transform: scale(1.1);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
         }
 
         .controls {
@@ -118,11 +129,10 @@
         #next-btn { background: var(--success); color: white; display: none; }
         #quit-btn { background: #a0aec0; color: white; }
 
-        #feedback { height: 40px; font-weight: bold; font-size: 1.56rem; }
+        #feedback { height: 40px; font-weight: bold; font-size: 1.56rem; margin-bottom: 10px;}
         .correct-text { color: var(--success); }
         .incorrect-text { color: var(--error); }
 
-        /* --- Hidden Modal for Name Input --- */
         #name-modal {
             display: none;
             position: fixed;
@@ -153,7 +163,6 @@
 </head>
 <body>
 
-    <!-- Top Display -->
     <div id="selected-name-display"></div>
 
     <div id="game-container">
@@ -174,7 +183,6 @@
         </div>
     </div>
 
-    <!-- Hidden Name Input Modal -->
     <div id="name-modal">
         <div class="modal-content">
             <h3>Enter Class List</h3>
@@ -185,34 +193,7 @@
     </div>
 
 <script>
-    // --- Name Picker Logic ---
-    function toggleModal() {
-        const modal = document.getElementById('name-modal');
-        modal.style.display = (modal.style.display === 'flex') ? 'none' : 'flex';
-    }
-
-    function pickRandomName() {
-        const input = document.getElementById('name-input-area').value;
-        const display = document.getElementById('selected-name-display');
-        const names = input.split(/[,\n]/).map(n => n.trim()).filter(n => n !== "");
-
-        if (names.length === 0) {
-            display.textContent = "Click 'Edit Names' first!";
-            return;
-        }
-
-        let counter = 0;
-        const interval = setInterval(() => {
-            display.textContent = names[Math.floor(Math.random() * names.length)];
-            counter++;
-            if (counter > 12) {
-                clearInterval(interval);
-                display.textContent = "⭐ " + names[Math.floor(Math.random() * names.length)] + " ⭐";
-            }
-        }, 60);
-    }
-
-    // --- Game Logic ---
+    // --- State Management ---
     const vocabulary = [
         { word: 'pet', start: 'p', rest: 'et' },
         { word: 'wet', start: 'w', rest: 'et' },
@@ -221,21 +202,25 @@
         { word: 'well', start: 'w', rest: 'ell' },
         { word: 'fell', start: 'f', rest: 'ell' }
     ];
-
     let currentItem = null;
     let pool = [...vocabulary];
+    let isLocked = false;
 
+    // --- DOM Elements ---
     const dropZone = document.getElementById('drop-zone');
     const patternDisplay = document.getElementById('word-pattern');
     const optionsContainer = document.getElementById('options');
     const feedback = document.getElementById('feedback');
     const nextBtn = document.getElementById('next-btn');
+    const nameDisplay = document.getElementById('selected-name-display');
 
+    // --- Initialization ---
     function initGame() {
         if (pool.length === 0) {
             document.getElementById('game-container').innerHTML = `<h1>🎉 All Done!</h1><button onclick="location.reload()" style="background: #ed8936; color: white;">Restart</button>`;
             return;
         }
+        isLocked = false;
         currentItem = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
         patternDisplay.textContent = currentItem.rest;
         dropZone.textContent = "";
@@ -252,12 +237,94 @@
         letters.sort(() => Math.random() - 0.5);
         letters.forEach(l => {
             const el = document.createElement('div');
-            el.className = 'letter'; el.textContent = l; el.draggable = true;
-            el.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', l));
+            el.className = 'letter';
+            el.textContent = l;
+            addSmartPointerEvents(el);
             optionsContainer.appendChild(el);
         });
     }
 
+    // --- Smartboard Friendly Pointer Logic ---
+    function addSmartPointerEvents(el) {
+        let offsetX, offsetY;
+        let startX, startY;
+
+        el.onpointerdown = function(e) {
+            if (isLocked) return;
+            el.setPointerCapture(e.pointerId);
+            el.classList.add('dragging');
+            
+            const rect = el.getBoundingClientRect();
+            startX = rect.left;
+            startY = rect.top;
+            
+            offsetX = e.clientX - rect.left;
+            offsetY = e.clientY - rect.top;
+            
+            el.style.position = 'fixed';
+            el.style.left = rect.left + 'px';
+            el.style.top = rect.top + 'px';
+        };
+
+        el.onpointermove = function(e) {
+            if (!el.classList.contains('dragging')) return;
+            el.style.left = (e.clientX - offsetX) + 'px';
+            el.style.top = (e.clientY - offsetY) + 'px';
+        };
+
+        el.onpointerup = function(e) {
+            if (!el.classList.contains('dragging')) return;
+            el.classList.remove('dragging');
+            el.releasePointerCapture(e.pointerId);
+
+            const dropRect = dropZone.getBoundingClientRect();
+            const letterRect = el.getBoundingClientRect();
+
+            // Check overlap
+            const isOverlapping = !(letterRect.right < dropRect.left || 
+                                    letterRect.left > dropRect.right || 
+                                    letterRect.bottom < dropRect.top || 
+                                    letterRect.top > dropRect.bottom);
+
+            if (isOverlapping) {
+                handleGuess(el.textContent, el);
+            } else {
+                // Return to original position
+                el.style.position = 'relative';
+                el.style.left = '0px';
+                el.style.top = '0px';
+            }
+        };
+    }
+
+    function handleGuess(letter, el) {
+        if (letter === currentItem.start) {
+            isLocked = true;
+            dropZone.textContent = letter;
+            feedback.textContent = "Correct!";
+            feedback.className = "correct-text";
+            dropZone.style.borderBottom = "7px solid var(--success)";
+            nextBtn.style.display = "inline-block";
+            el.style.visibility = 'hidden';
+        } else {
+            feedback.textContent = "Try again!";
+            feedback.className = "incorrect-text";
+            dropZone.style.borderBottom = "7px solid var(--error)";
+            // Snap back
+            el.style.position = 'relative';
+            el.style.left = '0px';
+            el.style.top = '0px';
+            
+            setTimeout(() => { 
+                if (!isLocked) {
+                    dropZone.textContent = ""; 
+                    dropZone.style.borderBottom = "7px solid var(--primary)";
+                }
+            }, 1000);
+        }
+    }
+
+    // --- Helper Functions ---
     function speakWord() {
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(currentItem.word);
@@ -265,28 +332,28 @@
         window.speechSynthesis.speak(utterance);
     }
 
-    dropZone.addEventListener('dragover', (e) => e.preventDefault());
-    dropZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        const draggedLetter = e.dataTransfer.getData('text/plain');
-        dropZone.textContent = draggedLetter;
-        if (draggedLetter === currentItem.start) {
-            feedback.textContent = "Correct!";
-            feedback.className = "correct-text";
-            dropZone.style.borderBottom = "7px solid var(--success)";
-            nextBtn.style.display = "inline-block";
-        } else {
-            feedback.textContent = "Try again!";
-            feedback.className = "incorrect-text";
-            dropZone.style.borderBottom = "7px solid var(--error)";
-            setTimeout(() => { 
-                if (feedback.className === "incorrect-text") {
-                    dropZone.textContent = ""; 
-                    dropZone.style.borderBottom = "7px solid var(--primary)";
-                }
-            }, 1000);
+    function toggleModal() {
+        const modal = document.getElementById('name-modal');
+        modal.style.display = (modal.style.display === 'flex') ? 'none' : 'flex';
+    }
+
+    function pickRandomName() {
+        const input = document.getElementById('name-input-area').value;
+        const names = input.split(/[,\n]/).map(n => n.trim()).filter(n => n !== "");
+        if (names.length === 0) {
+            nameDisplay.textContent = "Enter Names First!";
+            return;
         }
-    });
+        let counter = 0;
+        const interval = setInterval(() => {
+            nameDisplay.textContent = names[Math.floor(Math.random() * names.length)];
+            counter++;
+            if (counter > 12) {
+                clearInterval(interval);
+                nameDisplay.textContent = "⭐ " + names[Math.floor(Math.random() * names.length)] + " ⭐";
+            }
+        }, 60);
+    }
 
     function nextQuestion() { initGame(); }
     function quitGame() { if(confirm("Restart game?")) location.reload(); }
